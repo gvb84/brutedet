@@ -1,0 +1,2 @@
+-  A very tiny portion (of the already very tiny codebase) was based upon the great dablooms implementation by Bitly. It was written by Justin Hines and released under a very liberal license. 
+   For more information please see: http://word.bitly.com/post/28558800777/dablooms-an-open-source-scalable-counting-bloom and: https://github.com/bitly/dablooms/blob/master/LICENSE

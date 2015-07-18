@@ -1,0 +1,23 @@
+In this tarball you'll find a simple, drop-in bruteforce detection program.
+It's a very lightweight implementation in portable C and it doesn't require any
+external dependencies besides a standard C library. It should run under all
+modern POSIX-like systems (Linux, *BSD etc). The actual program doesn't know
+anything about IP addressess or the structure of the data that's being fed into
+it. One simply feeds textual lines of data to it's standard input. This data is
+then fed into a counting Bloom filter for three specific time buckets. There's
+a time bucket for a 10 second period, a 60 second period and a 10 minute
+period. The tresholds for each bucket are user configurable and once a treshold
+is reached a bruteforce attempt is detected and a supplied command will be
+executed. One can then for example add a firewall rule to block a certain IP
+address.
+
+The tool is just quick proof of concept but it might be useful when one doesn't
+have the time and resources to add integrated bruteforce detection to possibly
+very complex web application stack. It's easy to filter for, say, very
+CPU-intensive URL's and set specific tresholds for those URL's. 
+
+More information regarding usage of the tool can be found at the URL below or
+by emailing the author.
+
+www:   http://santarago.org/brutedet.html 
+email: Vincent Berg <gvb@santarago.org>
