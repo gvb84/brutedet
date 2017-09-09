@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<title>Simple bruteforce detection tool</title>
+<style type="text/css">
+pre { margin-left:20px; background-color: #f0f0f0; }
+</style>
+</head>
+<body>
+<h1>Simple bruteforce detection tool</h1>
+<p><i>Last updated: June 9th, 2014</i></p>
+<p></p><h2>Synopsis</h2>
+On this page you'll find a simple, drop-in bruteforce detection program.
+ It's a very lightweight implementation in portable C and it doesn't 
+require any external dependencies besides a standard C library. It 
+should run under all modern POSIX-like systems (Linux, *BSD etc).
+The actual program doesn't know anything about IP addressess or the 
+structure of the data that's being fed into it. One simply feeds textual
+ lines of data to its standard input. This data is then fed into a 
+counting <a href="http://en.wikipedia.org/wiki/Bloom_filter">Bloom filter</a>
+ for
+three specific time buckets. There's a time bucket for a 10 second 
+period, a 60 second period and a 10 minute period. The tresholds for 
+each bucket are user configurable and once a treshold is reached a 
+bruteforce attempt is detected and a supplied command will be executed. 
+One can then for example add a firewall rule to block a certain IP 
+address.
+<p></p>
+<p>
+The tool is just <b><i>quick proof of concept</i></b> but it might be 
+useful when one doesn't have the time and resources to add integrated 
+bruteforce detection to a possibly very complex web application stack. 
+It's easy to filter for, say, very CPU-intensive URL's and set specific 
+tresholds for those URL's. Two examples of usage of the tool are 
+provided below; one in which a webserver is protected and another 
+example in which TCP SYN scans are detected.
+</p>
+<p></p><h2>Usage</h2><p></p>
+<p>Since the tool does not keep track of which IP's were banned nor 
+when, it cannot unban those IP's either. To get this functionality one 
+can simply use <a href="http://www.fail2ban.org/">fail2ban</a>. After installing fail2ban open up <code>/etc/fail2ban/jail.conf</code> and add the following lines:
+</p><pre>[brutedet]
+enabled = true
+filter  = brutedet
+logpath = /var/log/brutedet.log
+action  = iptables-allports
+maxretry = 1
+</pre>
+<p></p>
+<p>
+Then create <code>/etc/fail2ban/filter.d/brutedet.conf</code> with the following content:
+</p><pre>[Definition]
+failregex = &lt;HOST&gt;
+</pre>
+<p></p>
+<p>Create the file <code>/var/log/brutedet.log</code> and make sure it's readable by the credentials fail2ban runs under.</p>
+<p>Reload the fail2ban rules by running <code>fail2ban-client reload</code> and make sure there are no errors being displayed.</p>
+<h3>URL-based bruteforce protection</h3>
+<p>Now we are ready to start parsing HTTP log files and feed the data into the tool. First we disable any buffering and we run
+a <code>tail -f</code> on the logfile of our webserver such as this:
+</p><pre>$ stdbuf -i0 -o0 -e0 tail -f /var/log/fnord/current
+@40000000538e48a02e25609c x.x.x.x 200 3453 santarago.org:80 Mozilla/5.0_(Windows_NT_6.1;_WOW64;_rv:29.0)_Gecko/20100101_Firefox/29.0 none /brutedet.html
+@40000000538e48a13b676b9c x.x.x.x 304 0 santarago.org:80 Mozilla/5.0_(Windows_NT_6.1;_WOW64;_rv:29.0)_Gecko/20100101_Firefox/29.0 none /brutedet.html
+@40000000538e48af23f7c95c x.x.x.x 200 3467 santarago.org:80 Mozilla/5.0_(Windows_NT_6.1;_WOW64;_rv:29.0)_Gecko/20100101_Firefox/29.0 none /brutedet.html
+@40000000538e48e11a24871c x.x.x.x 200 3585 santarago.org:80 Mozilla/5.0_(Windows_NT_6.1;_WOW64;_rv:29.0)_Gecko/20100101_Firefox/29.0 none /brutedet.html
+</pre>
+<p></p>
+<p>
+To extract the IP addresses and, for example, the user-agent data we pipe the preceding output through <code>awk</code> akin to:
+</p><pre>$ stdbuf -i0 -o0 -e0 tail -f /var/log/fnord/current | \
+awk -W interactive '{print $2 " " $6}'
+x.x.x.x Mozilla/5.0_(Windows_NT_6.1;_WOW64;_rv:29.0)_Gecko/20100101_Firefox/29.0
+x.x.x.x Mozilla/5.0_(Windows_NT_6.1;_WOW64;_rv:29.0)_Gecko/20100101_Firefox/29.0
+x.x.x.x Mozilla/5.0_(Windows_NT_6.1;_WOW64;_rv:29.0)_Gecko/20100101_Firefox/29.0
+x.x.x.x Mozilla/5.0_(Windows_NT_6.1;_WOW64;_rv:29.0)_Gecko/20100101_Firefox/29.0
+</pre>
+<p></p>
+<p>The preceding data should now be piped into the tool. Let's settle 
+for allowing a maximum of 5 requests from a specific IP every 10 
+seconds, a maximum of 10 requests every minute and a maximum of 20 
+requests every ten minutess. This means we run the tool with <code>./brutedet 5 10 20 &lt;cmd&gt;</code>.
+For the command which will be executed we need to output the IP address 
+and the date as this is a fail2ban requirement. We specify the command 
+as a long string. Before execution every occurence of the word <code>KEY</code>
+ is replaced with the actual IP address. In the aforementioned fail2ban 
+configuration we set up fail2ban such that it would read its input for 
+the bruteforce detection jail from the file <code>/var/log/brutedet.log</code>. This means that the command needs to write out the IP and the date to that specific file. This results in a command like <code>(printf 'KEY ' &amp;&amp; date) &gt;&gt; /var/log/brutedet.log</code>. The entire resulting command will then become the following:
+</p><pre>$ stdbuf -i0 -o0 -e0 tail -f /var/log/fnord/current | \
+awk -W interactive '{print $2 " " $6}' | \
+./brutedet 5 10 20 "(printf 'KEY ' &amp;&amp; date) &gt;&gt; /var/log/brutedet.log"
+</pre>
+<p></p>
+
+<p>
+With the preceding command running we can now fire up a browser and 
+request a url more than 5 times in 10 seconds. If everything went 
+according to plan an entry will be written to <code>/var/log/brutedet.log</code>. This entry will be picked up by fail2ban which will automatically add a firewall rule using iptables and write a log entry to <code>/var/log/fail2ban.log</code>. After some time this IP will automatically become unbanned as per the fail2ban configuration:
+</p><pre>2014-06-03 23:28:24,377 fail2ban.actions: WARNING [brutedet] Ban x.x.x.x
+2014-06-03 23:38:24,797 fail2ban.actions: WARNING [brutedet] Unban x.x.x.x
+</pre>
+If you want you can also have more advanced filters by inserting for example a <code>grep</code>
+ command with the appropriate filters in the command. Say that one has a
+ webservice that has an API call which always takes 30 seconds to 
+complete because it's very CPU/resource intensive. By filtering out 
+these requests and only piping these through to the tool one has the 
+ability to quickly do bruteforce detecting for these URL's without 
+having to introduce this throttling functionality in the web application
+ stack itself.
+<p></p>
+<h3>Detecting SYN floods</h3>
+<p>
+You can also use the tool to automatically detect SYN floods. By using someting like <a href="http://www.wireshark.org/">tshark</a>
+ one can filter out SYN packets quite easily and apply limits to how 
+often a SYN packet will be accepted from a specific IP before the source
+ IP will be blocked by fail2ban.
+</p><pre>tshark -i eth0 -l -R "tcp.flags==0x02" "tcp" | \
+awk -W interactive '{print $2 " " $2}' | \
+./brutedet 5 10 20 "(printf 'KEY ' &amp;&amp; date) &gt;&gt; /var/log/brutedet.log"
+</pre>
+
+<p></p>
+<p></p><h2>Compilation</h2>
+<ul>
+<li>Download the <a href="http://santarago.org/brutedet.tgz">code</a>.</li>
+<li>Run the following commands: <code>tar zxvf brutedet.tgz &amp;&amp; cd brutedet &amp;&amp; make &amp;&amp; ./brutedet</code></li>
+<li>This should result in seeing the usage screen which looks something like this:
+<pre>not enough (or too many) arguments supplied
+
+./brutedet [options] &lt;t1&gt; &lt;t2&gt; &lt;t3&gt; "echo added KEY"
+
+Parameters t1, t2, t3 are the integer tresholds for the 10 second-,
+1 minute-, 10 minute-bucket respectively.
+
+The last argument is the command to execute once a treshold
+is passed. The word KEY will be replaced with the key in the
+bloomfilter. This will most likely be an IP address.
+
+Options:
+ -c &lt;capacity&gt;        bloom filter capacity (default: 100000)
+ -e &lt;error rate&gt;      allowed error rate(default: 0.010)
+ -h                    help (this screen)
+
+The following example echo's a warning to a logfile
+and it will accept a maximum of 5 requests every 10 seconds,
+a maximum of 20 requests every minute and a maximum of 40
+requests every 10 minutes.
+
+./brutedet 5 20 40 "echo treshold reached for KEY &gt;&gt; /tmp/logfile.txt"
+</pre>
+</li>
+<li>If not please drop me an email specifying the Operating System, kernel version, C library version and compiler being used.</li>
+</ul>
+<p></p>
+<p></p><h2>Acknowledgements</h2>
+<ul>
+<li>A very tiny portion (of the already very tiny codebase) was based upon the great dablooms <a href="http://word.bitly.com/post/28558800777/dablooms-an-open-source-scalable-counting-bloom">implementation</a> by Bitly. It was written by Justin Hines and released under a very liberal <a href="https://github.com/bitly/dablooms/blob/master/LICENSE">license</a>.
+</li></ul>
+<p></p>
+<p></p><h2>Contact</h2>
+Feel free to contact me by <a href="mailto:gvb@santarago.org">email</a> with bugs, suggestions and/or questions.
+<p></p>
+
+
+</body></html>

@@ -16,8 +16,7 @@ have the time and resources to add integrated bruteforce detection to possibly
 very complex web application stack. It's easy to filter for, say, very
 CPU-intensive URL's and set specific tresholds for those URL's. 
 
-More information regarding usage of the tool can be found at the URL below or
-by emailing the author.
+More information regarding usage of the tool can be found at the included HTML
+file in this distribution 'doc/brutedet.html' or by emailing the author.
 
-www:   http://santarago.org/brutedet.html 
 email: Vincent Berg <gvb@santarago.org>
